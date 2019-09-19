@@ -15,6 +15,8 @@ import random
 import cv2
 import os
 import json
+import pandas as pd
+
 # handle command line arguments
 ap = argparse.ArgumentParser()
 ap.add_argument("-d", "--dataset", required=True,
@@ -35,99 +37,36 @@ data = []
 labels = []
 
 # load image files from the dataset
-'''
-image_files = [f for f in glob.glob(args.dataset + "/**/*", recursive=True) if not os.path.isdir(f)] 
-random.seed(42)
-random.shuffle(image_files)
-
-# create groud-truth label from the image path
-for img in image_files:
-
-    image = cv2.imread(img)
-    
-    image = cv2.resize(image, (img_dims[0],img_dims[1]))
-    image = img_to_array(image)
-    data.append(image)
-
-    label = img.split(os.path.sep)[-2]
-    if label == "woman":
-        label = 1
-    else:
-        label = 0
-        
-    labels.append([label])a
-'''
 
 # get images
-data_dir = os.path.join(args.dataset, 'images')
-annotations = os.path.join(args.dataset, 'annotations', 'train2017_400.json')
-images_files = [os.path.join(data_dir, image) for image in os.listdir(data_dir)]
-random.shuffle(images_files)
+csv_path = os.path.join(args.dataset, "wiki_train.csv")
+df = pd.read_csv(csv_path)
 
-with open(annotations, 'r') as f:
-    annon_dict = json.loads(f.read())
-
-for idx, img in enumerate(images_files):
-    print(idx)
-    # get images
-    img_id, annon, _ = os.path.basename(img)[:-4].split('_')
-    image = cv2.imread(img)
+for _, row in df.iterrows():
+    image = cv2.imread(row["Image_Path"])
+    if image is None:
+        continue
     image = cv2.resize(image, (img_dims[0], img_dims[1]))
     data.append(image)
-
-    # get labels
-    label = annon_dict[img_id][annon]['age_gender_pred']['gender']
-    if label == "woman":
-        label = 1
-    else:
+    label = row["Gender"]
+    # To be consistent between datasets, woman is 1, men is 0. For WIKI we have to flip
+    if label == 1:
         label = 0
+    else:
+        label = 1
     labels.append(label)
 
+
 # pre-processing
-data = np.array(data, dtype="float32") / 255.0
+data = np.array(data, dtype="float") / 255.0
 labels = np.array(labels)
 
-# Validation
-data_val = []
-labels_val = []
-
-val_dataset_dir = '/home/giancarlo/Documents/Gender-data/custom_val/'
-data_dir = os.path.join(val_dataset_dir, 'images')
-annotations = os.path.join(val_dataset_dir, 'annotations', 'val2017_400.json')
-images_files = [os.path.join(data_dir, image) for image in os.listdir(data_dir)]
-random.shuffle(images_files)
-
-with open(annotations, 'r') as f:
-    annon_dict = json.loads(f.read())
-
-for idx, img in enumerate(images_files):
-    print(idx)
-    # get images
-    img_id, annon, _ = os.path.basename(img)[:-4].split('_')
-    image = cv2.imread(img)
-    image = cv2.resize(image, (img_dims[0], img_dims[1]))
-    data_val.append(image)
-
-    # get labels
-    label = annon_dict[img_id][annon]['age_gender_pred']['gender']
-    if label == "woman":
-        label = 1
-    else:
-        label = 0
-    labels_val.append(label)
-    
-# pre-processing
-data_val = np.array(data_val, dtype="float") / 255.0
-labels_val = np.array(labels_val)
+print(data.shape)
+print(labels.shape)
 
 # split dataset for training and validation
-
-
-trainX = data
-trainY = labels
-testX = data_val
-testY = labels_val
-
+(trainX, testX, trainY, testY) = train_test_split(data, labels, test_size=0.1,
+                                                  random_state=42)
 trainY = to_categorical(trainY, num_classes=2)
 testY = to_categorical(testY, num_classes=2)
 
